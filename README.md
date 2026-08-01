@@ -8,7 +8,7 @@ No LimboAPI, no fake worlds, no heavy dependencies — just lightweight socket c
 
 ## Features
 
-### 🔌 On‑Demand Server Startup
+### On‑Demand Server Startup
 - When a player connects (login or `/server`) to a managed backend server, VelocityAutostart checks via TCP whether the server is already running.
 - If not running:
     - Player is redirected to the lobby.
@@ -16,17 +16,17 @@ No LimboAPI, no fake worlds, no heavy dependencies — just lightweight socket c
     - Plugin polls the server port until it becomes reachable.
     - Player receives a clickable “Join” message once the server is ready.
 
-### 🖱️ Click‑to‑Join System
+### Click‑to‑Join System
 - When the backend server becomes reachable, the player receives:
     - A “server ready” message
     - A clickable button (`[Click to join]`)
     - A hover tooltip (“Click to join %server%”)
 - The player can also use `/join`.
 
-### ⏳ Timeout Handling
+### Timeout Handling
 - If the server does not start within `pollTimeoutSeconds`, the player receives a timeout message.
 
-### 📴 Automatic Stop on Inactivity (NEW)
+### Automatic Stop on Inactivity (NEW)
 VelocityAutostart now includes **Auto‑Stop**, based on your new classes:
 
 - If a server has **no players online** for `autoStopIdleSeconds`, it is stopped via Crafty API.
@@ -34,7 +34,7 @@ VelocityAutostart now includes **Auto‑Stop**, based on your new classes:
 - Idle checks run every `autoStopCheckIntervalSeconds`.
 - Players who still have a pending `/join` for that server are notified that the server was stopped.
 
-### 🔐 Optional Insecure TLS
+### Optional Insecure TLS
 - If Crafty runs without a valid certificate, TLS verification can be disabled via `craftyAllowInsecureTls`.
 
 ---

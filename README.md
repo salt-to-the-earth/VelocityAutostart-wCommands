@@ -1,20 +1,56 @@
 # VelocityAutostart
-> “**CraftyAutoServer**” → replaced with **VelocityAutostart**
 
-Minimalist Velocity plugin: starts backend servers on demand via the Crafty Controller API and keeps the player in the lobby instead of simulating a Limbo fake world.
-> *“Minimalistisches Velocity-Plugin: startet Backend-Server bei Bedarf über die Crafty-Controller-API und hält den Spieler solange in der Lobby…”*
+Minimalist Velocity plugin: automatically starts backend servers on demand via the Crafty Controller API, keeps players in the lobby until the server is ready, and optionally **stops servers again when they become idle**.
+
+No LimboAPI, no fake worlds, no heavy dependencies — just lightweight socket checks and Crafty API calls.
+
+---
+
+## Features
+
+### 🔌 On‑Demand Server Startup
+- When a player connects (login or `/server`) to a managed backend server, VelocityAutostart checks via TCP whether the server is already running.
+- If not running:
+    - Player is redirected to the lobby.
+    - Plugin triggers `start_server` via Crafty API.
+    - Plugin polls the server port until it becomes reachable.
+    - Player receives a clickable “Join” message once the server is ready.
+
+### 🖱️ Click‑to‑Join System
+- When the backend server becomes reachable, the player receives:
+    - A “server ready” message
+    - A clickable button (`[Click to join]`)
+    - A hover tooltip (“Click to join %server%”)
+- The player can also use `/join`.
+
+### ⏳ Timeout Handling
+- If the server does not start within `pollTimeoutSeconds`, the player receives a timeout message.
+
+### 📴 Automatic Stop on Inactivity (NEW)
+VelocityAutostart now includes **Auto‑Stop**, based on your new classes:
+
+- If a server has **no players online** for `autoStopIdleSeconds`, it is stopped via Crafty API.
+- A **grace period** (`autoStopGracePeriodSeconds`) prevents immediate shutdown after startup.
+- Idle checks run every `autoStopCheckIntervalSeconds`.
+- Players who still have a pending `/join` for that server are notified that the server was stopped.
+
+### 🔐 Optional Insecure TLS
+- If Crafty runs without a valid certificate, TLS verification can be disabled via `craftyAllowInsecureTls`.
+
+---
 
 ## How it works
 
-1. A player connects (login or `/server`) to a server listed in `config.json`.
-2. The plugin checks via TCP connect whether the server is already running (`host:port`).
-3. If not: the player stays in the lobby, the plugin calls `POST /api/v2/servers/{id}/action/start_server` on Crafty and then polls every few seconds via socket check whether the port is open.
-4. As soon as it becomes reachable: automatic connection to the target server.
-5. Timeout after `pollTimeoutSeconds` (default 120s) with an error message.
-> *“Plugin prüft per TCP-Connect… pollt danach alle paar Sekunden… Timeout nach pollTimeoutSeconds…”*
-
-No LimboAPI, no additional fake world, no repeated Crafty API calls during polling (only a simple socket connect) — therefore significantly more lightweight than LimboAutoServer.
-> *“Kein LimboAPI… deutlich leichtgewichtiger…”*
+1. Player connects to a managed server.
+2. VelocityAutostart checks reachability via TCP (`host:port`).
+3. If offline:
+    - Player is redirected to the lobby.
+    - Plugin triggers Crafty `start_server`.
+    - Plugin polls the port every `pollIntervalSeconds`.
+4. When reachable:
+    - Player receives a clickable join message.
+5. If idle later:
+    - Plugin triggers Crafty `stop_server`.
 
 ---
 
@@ -29,20 +65,42 @@ No LimboAPI, no additional fake world, no repeated Crafty API calls during polli
 
 ## Installation
 
-1. Place the JAR into Velocity’s `plugins/` folder and restart Velocity.
-2. It will automatically generate `plugins/velocity-autostart/config.json`:
+1. Place the JAR into Velocity’s `plugins/` folder.
+2. Restart Velocity.
+3. A default config will be created at:
+
+```
+plugins/velocity-autostart/config.json
+```
+
+### Example configuration
 
 ```json
 {
   "craftyBaseUrl": "https://crafty.example.com:8443",
   "craftyApiToken": "PUT_TOKEN_HERE",
   "craftyAllowInsecureTls": false,
-  "lobbyServer": "lobby",
+
+  "lobbyServer": "default_lobby",
   "pollIntervalSeconds": 3,
   "pollTimeoutSeconds": 120,
   "socketTimeoutMillis": 500,
-  "messageStarting": "&e%server% is starting, you will be automatically connected once it is ready...",
+
+  "messageStarting": "&e%server% is starting, you'll be notified once it's ready...",
+  "messageReady": "&a%server% is ready!",
   "messageTimeout": "&cThe server could not be started in time. Please try again later.",
+  "messageJoinButtonText": "[Click to join]",
+  "messageJoinHoverText": "Click to join %server%",
+  "messagePlayerOnly": "&cOnly players can use this command.",
+  "messageNoServerReady": "&cNo server ready to join yet. Wait for the start notification.",
+  "messageServerNotFound": "&cServer not found.",
+  "messageServerStoppedIdle": "&c%server% was stopped due to inactivity. Reconnect to start it again.",
+
+  "autoStopEnabled": true,
+  "autoStopIdleSeconds": 600,
+  "autoStopCheckIntervalSeconds": 30,
+  "autoStopGracePeriodSeconds": 120,
+
   "servers": {
     "survival": {
       "craftyServerId": "5adcec83-684c-4555-a7e9-9d913203d07e",
@@ -53,26 +111,18 @@ No LimboAPI, no additional fake world, no repeated Crafty API calls during polli
 }
 ```
 
-3. `craftyApiToken`: Crafty → Profile → API Keys → Generate Key. The key needs at least the `command` permission for the affected servers.
-4. `craftyServerId`: from the URL in Crafty (`.../server/detail/<UUID>`) or via `GET /api/v2/servers`.
-5. `host`/`port`: the address under which Velocity reaches the backend server (not the Crafty URL!).
-6. Reload Velocity or restart the server so the configuration takes effect.
-> *“host/port: die Adresse, unter der Velocity den Backend-Server erreicht…”*
-
 ---
 
 ## Requirements
 
-- A lobby server already running, referenced as `lobbyServer`.
+- A running lobby server (`lobbyServer`).
 - Java 17+, Velocity 3.4+.
-- Crafty API token with start permission for the managed servers.
-> *“Java 17+, Velocity 3.4+.”*
+- Crafty API token with `command` permission for the managed servers.
 
 ---
 
-## Limitations (intentionally kept simple)
+## Limitations
 
-- No automatic stopping on inactivity (can be added easily if needed, e.g., via scheduled task + `stop_server` action + player count check).
-- No multi‑proxy synchronization of `startingServers` (only relevant with multiple Velocity instances).
-- TLS verification can be disabled via `craftyAllowInsecureTls` if Crafty runs without a valid certificate — for production, better place a reverse proxy with a proper certificate in front.
-> *“TLS-Verifizierung kann per craftyAllowInsecureTls deaktiviert werden…”*
+- No multi‑proxy synchronization of `startingServers`.
+- Auto‑Stop is simple and does not track cross‑proxy player counts.
+- TLS verification can be disabled, but production setups should use a proper certificate.

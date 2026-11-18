@@ -1,5 +1,5 @@
 name: HubControl
-version: 1.0.0
+version: 1.1.0
 main: org.manator.hubcontrol.HubControlPlugin
 api-version: '26.3'
 description: Command-block bridge to VelocityAutostart server controls
@@ -8,11 +8,3 @@ commands:
   hvas:
     description: Control managed backend servers through VelocityAutostart
     usage: /hvas <start|stop|status> <server>
-    permission: hubcontrol.use
-permissions:
-  hubcontrol.use:
-    description: Allows use of HubControl commands
-    default: true
-  hubcontrol.admin:
-    description: Allows players to start or stop managed servers
-    default: op

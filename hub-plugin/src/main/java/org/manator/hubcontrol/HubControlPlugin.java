@@ -2,6 +2,7 @@ package org.manator.hubcontrol;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import net.kyori.adventure.text.Component;
 import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -9,6 +10,10 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.scoreboard.Criteria;
+import org.bukkit.scoreboard.Objective;
+import org.bukkit.scoreboard.RenderType;
+import org.bukkit.scoreboard.Scoreboard;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -22,6 +27,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class HubControlPlugin extends JavaPlugin implements CommandExecutor {
 
+    // Command-block automation reads these values:
+    // 0=STOPPED, 1=RUNNING, 2=STARTING, 3=STOPPING, 4=ERROR.
+    public static final String SCOREBOARD_OBJECTIVE = "vas_state";
+
     private final Gson gson = new Gson();
     private final Map<String, ServerStatus> statusCache = new ConcurrentHashMap<>();
     private final Set<String> refreshing = ConcurrentHashMap.newKeySet();
@@ -30,6 +39,7 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
     private String apiToken;
     private int requestTimeoutMillis;
     private BukkitTask refreshTask;
+    private Objective stateObjective;
 
     @Override
     public void onEnable() {
@@ -38,6 +48,7 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
         apiToken = getConfig().getString("api-token", "CHANGE_ME");
         requestTimeoutMillis = Math.max(250, getConfig().getInt("request-timeout-millis", 1500));
         http = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(requestTimeoutMillis)).build();
+        initializeScoreboard();
 
         if (getCommand("vas") != null) {
             getCommand("vas").setExecutor(this);
@@ -48,8 +59,20 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
                 this, this::refreshKnownStatuses, 1L, refreshSeconds * 20L);
 
         getLogger().info("HubControl enabled. Velocity API: " + apiUrl);
+        getLogger().info("Command-block state objective: " + SCOREBOARD_OBJECTIVE
+                + " (0=STOPPED, 1=RUNNING, 2=STARTING, 3=STOPPING, 4=ERROR)");
         if ("CHANGE_ME".equals(apiToken) || apiToken.isBlank()) {
             getLogger().warning("Set api-token in plugins/HubControl/config.yml to the controlApiToken in VelocityAutostart config.json.");
+        }
+    }
+
+    private void initializeScoreboard() {
+        Scoreboard scoreboard = getServer().getScoreboardManager().getMainScoreboard();
+        stateObjective = scoreboard.getObjective(SCOREBOARD_OBJECTIVE);
+        if (stateObjective == null) {
+            stateObjective = scoreboard.registerNewObjective(
+                    SCOREBOARD_OBJECTIVE, Criteria.DUMMY,
+                    Component.text("Velocity Server State"), RenderType.INTEGER);
         }
     }
 
@@ -66,7 +89,7 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length != 2) {
-            sender.sendMessage("Usage: /vas <start|stop|status|isrunning|isstopped> <server>");
+            sender.sendMessage("Usage: /vas <start|stop|status> <server>");
             return false;
         }
 
@@ -88,16 +111,8 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
                 refreshStatus(server, sender);
                 return true;
             }
-            case "isrunning" -> {
-                ServerStatus status = statusCache.get(server);
-                return status != null && "RUNNING".equals(status.status);
-            }
-            case "isstopped" -> {
-                ServerStatus status = statusCache.get(server);
-                return status != null && "STOPPED".equals(status.status);
-            }
             default -> {
-                sender.sendMessage("Unknown action. Use start, stop, status, isrunning, or isstopped.");
+                sender.sendMessage("Unknown action. Use start, stop, or status.");
                 return false;
             }
         }
@@ -112,7 +127,7 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
                     String message = body.has("message") ? body.get("message").getAsString()
                             : operation.toUpperCase() + " request returned HTTP " + response.statusCode();
                     if (body.has("status")) {
-                        statusCache.put(server, new ServerStatus(body.get("status").getAsString(),
+                        cacheStatus(server, new ServerStatus(body.get("status").getAsString(),
                                 body.has("players") ? body.get("players").getAsInt() : 0));
                     }
                     getServer().getScheduler().runTask(this,
@@ -149,7 +164,7 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
                     if (response.statusCode() >= 200 && response.statusCode() < 300 && body.has("status")) {
                         ServerStatus status = new ServerStatus(body.get("status").getAsString(),
                                 body.has("players") ? body.get("players").getAsInt() : 0);
-                        statusCache.put(server, status);
+                        cacheStatus(server, status);
                         if (sender != null) {
                             getServer().getScheduler().runTask(this, () -> sender.sendMessage(
                                     "[HubControl] " + server + ": " + status.status
@@ -170,6 +185,15 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
                     return null;
                 })
                 .whenComplete((ignored, error) -> refreshing.remove(server));
+    }
+
+    private void cacheStatus(String server, ServerStatus status) {
+        statusCache.put(server, status);
+        getServer().getScheduler().runTask(this, () -> {
+            if (stateObjective != null) {
+                stateObjective.getScore("$" + server).setScore(status.score);
+            }
+        });
     }
 
     private HttpRequest.Builder request(String path) {
@@ -195,10 +219,18 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
     private static final class ServerStatus {
         private final String status;
         private final int players;
+        private final int score;
 
         private ServerStatus(String status, int players) {
             this.status = status;
             this.players = players;
+            this.score = switch (status) {
+                case "RUNNING" -> 1;
+                case "STARTING" -> 2;
+                case "STOPPING" -> 3;
+                case "ERROR" -> 4;
+                default -> 0;
+            };
         }
     }
 }

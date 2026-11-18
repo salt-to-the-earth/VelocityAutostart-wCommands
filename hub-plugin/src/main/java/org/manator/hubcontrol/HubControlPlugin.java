@@ -100,10 +100,11 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
 
         switch (action) {
             case "start", "stop" -> {
-                if (!(sender instanceof BlockCommandSender)
-                        && !(sender instanceof ConsoleCommandSender)
-                        && !sender.hasPermission("hubcontrol.admin")) {
-                    sender.sendMessage("[HubControl] You do not have permission to control servers.");
+                boolean authorized = sender instanceof BlockCommandSender
+                        || sender instanceof ConsoleCommandSender
+                        || (sender instanceof org.bukkit.entity.Player player && player.isOp());
+                if (!authorized) {
+                    sender.sendMessage("[HubControl] You must be OP on the Hub to control servers.");
                     return false;
                 }
                 sendOperation(sender, server, action);

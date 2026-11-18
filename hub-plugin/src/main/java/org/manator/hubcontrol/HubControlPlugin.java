@@ -178,6 +178,7 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
                     }
                 })
                 .exceptionally(error -> {
+                    cacheStatus(server, new ServerStatus("ERROR", 0));
                     if (sender != null) {
                         getServer().getScheduler().runTask(this, () ->
                                 sender.sendMessage("[HubControl] Could not contact VelocityAutostart."));

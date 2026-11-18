@@ -1,8 +1,32 @@
 # VelocityAutostart + HubControl
 
-A two-plugin Minecraft network control project. VelocityAutostart runs on the Velocity proxy and manages backend servers through the Crafty Controller API. HubControl runs on the Paper Hub server and gives command blocks a secure way to request those controls.
+**On-demand backend startup, idle shutdown, and in-game server controls for Minecraft networks.** This fork expands the original VelocityAutostart project with a Velocity chat-command interface, a companion Paper Hub plugin, and a command-block status interface. VelocityAutostart runs on the proxy and manages backend servers through Crafty Controller; HubControl runs on the Paper Hub and securely relays authorized requests to the proxy.
+
+This project provides controls in two places:
+
+- **Velocity proxy chat:** `/vas <start|stop|status> <server>`
+- **Paper Hub chat or command blocks:** `/vas <start|stop|status> <server>`
+
+The command syntax is intentionally similar, but each command is handled by the plugin installed on that server. See the separate sections below for permissions and behavior.
 
 The project builds **two separate JAR files** from one GitHub repository.
+
+## Velocity proxy commands and automatic management
+
+VelocityAutostart registers `/vas` on the Velocity proxy:
+
+```
+/vas start survival
+/vas stop survival
+/vas status survival
+```
+
+- `status` is available to everyone and reports the state and connected-player count.
+- Player-issued `start` and `stop` commands require the `velocityautostart.admin` permission. The proxy console can also use them.
+- A stop request is rejected while players are connected; new connections are blocked while shutdown is underway.
+- `/join` connects a player to the backend for which they received a ready notification after startup.
+
+The plugin also retains automatic startup when a player attempts to join an offline managed backend, lobby redirection while it starts, and optional idle shutdown.
 
 ## Features retained from VelocityAutostart
 
@@ -12,7 +36,18 @@ The project builds **two separate JAR files** from one GitHub repository.
 - Optionally stops servers after an idle period.
 - Uses Crafty Controller API for backend start and stop actions.
 
-## Hub command-block control
+## Paper Hub commands and command-block control
+
+HubControl independently registers the same `/vas` command on the Paper Hub:
+
+```
+/vas start survival
+/vas stop survival
+/vas status survival
+```
+
+Hub command blocks and the server console may issue start/stop requests. Players need `hubcontrol.admin` for start/stop; status is available to ordinary players. This lets a Hub command block or an authorized player operate the managed backends without giving the Hub plugin Crafty credentials.
+
 
 HubControl communicates with the Velocity plugin through an authenticated HTTP API bound only to `127.0.0.1`. The Hub plugin does not receive the Crafty API token and cannot contact Crafty directly.
 
@@ -55,7 +90,8 @@ This scoreboard is the automation interface. Command blocks can use it to decide
 - VelocityAutostart generates the token automatically in its config if one is not already present.
 - HubControl is configured with the same token.
 - Hub command blocks and the server console may request start/stop operations. Ordinary players need the `hubcontrol.admin` permission to do so.
-- The Velocity chat command `/vas status <server>` is public; `/vas start` and `/vas stop` require `velocityautostart.admin` for players.
+- On Velocity, `/vas status <server>` is public; player use of `/vas start` and `/vas stop` requires `velocityautostart.admin`.
+- On the Paper Hub, HubControl's `/vas status <server>` is public; player use of `/vas start` and `/vas stop` requires `hubcontrol.admin`. Command blocks and console can issue these operations.
 
 ## Build
 

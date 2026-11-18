@@ -1,44 +1,58 @@
 # VelocityAutostart + HubControl
 
-**On-demand backend startup, idle shutdown, and in-game server controls for Minecraft networks.** This fork expands the original VelocityAutostart project with a Velocity chat-command interface, a companion Paper Hub plugin, and a command-block status interface. VelocityAutostart runs on the proxy and manages backend servers through Crafty Controller; HubControl runs on the Paper Hub and securely relays authorized requests to the proxy.
+On-demand backend startup, idle shutdown, and in-game server controls for a Minecraft network. The repository builds two plugins: VelocityAutostart for the Velocity proxy and HubControl for the Paper Hub.
 
-This project provides controls in two places:
+## One server configuration location
 
-- **Velocity proxy chat:** `/vas <start|stop|status> <server>`; proxy administrators are managed from the Crafty Velocity console with `/op <online-player>` and `/deop <online-player>`.
-- **Paper Hub chat or command blocks:** `/hvas <start|stop|status> <server>`
+Velocity's `velocity.toml` is the source of truth for server names and backend addresses. Add Crafty Controller IDs in a separate top-level `[autostart]` table in the same file:
 
-The command syntax is intentionally similar, but each command is handled by the plugin installed on that server. See the separate sections below for permissions and behavior.
+```toml
+[servers]
+hub = "127.0.0.1:25566"
+survival = "127.0.0.1:25567"
+levelup = "127.0.0.1:25568"
+makeitbrakeit = "127.0.0.1:25569"
+creative = "127.0.0.1:25570"
 
-The project builds **two separate JAR files** from one GitHub repository. Proxy `/op` and `/deop` are plugin commands, not Paper OP commands: they only manage access to this plugin on Velocity, and are intentionally restricted to the Crafty Velocity console. The target must be online so its authenticated Minecraft UUID can be stored.
+[autostart]
+survival = "CRAFTY-ID-FOR-SURVIVAL"
+levelup = "CRAFTY-ID-FOR-LEVELUP"
+makeitbrakeit = "CRAFTY-ID-FOR-MAKEITBRAKEIT"
+creative = "CRAFTY-ID-FOR-CREATIVE"
+```
 
-## Velocity proxy commands and automatic management
+Important details:
 
-VelocityAutostart registers `/vas` on the Velocity proxy:
+- `[autostart]` is a separate top-level table. Do **not** name it `[servers.autostart]`; that would make it a nested value inside Velocity's `servers` table.
+- The key must exactly match a server name in `[servers]`.
+- The value is that server's Crafty Controller server ID.
+- Do not normally add the always-on Hub/lobby to `[autostart]`. Add only backends this plugin should start and stop on demand.
+- VelocityAutostart reads server addresses and ports from Velocity's registered server configuration. They are not duplicated in its JSON config.
+- A server without an `[autostart]` ID continues to be a normal Velocity server; it simply is not managed by this plugin. Invalid or unregistered entries are logged and skipped.
+- If an older installation has server mappings in VelocityAutostart's old `config.json` and no `[autostart]` table yet, the plugin migrates those Crafty IDs by appending the new table to `velocity.toml`. Existing TOML entries are preserved.
+
+## Velocity proxy commands
+
+VelocityAutostart registers:
 
 ```
-/hvas start survival
-/hvas stop survival
-/hvas status survival
+/vas start survival
+/vas stop survival
+/vas status survival
 ```
 
-- `status` is available to everyone and reports the state and connected-player count.
-- Player-issued `start` and `stop` commands require proxy administrator status. Grant or revoke it from the Velocity console in Crafty with `/op <online-player>` and `/deop <online-player>`. The target player must be online on the proxy when you run the command; the plugin stores their account UUID in its config. The proxy console can also use `/vas start` and `/vas stop`.
-- A stop request is rejected while players are connected; new connections are blocked while shutdown is underway.
+- Status is public.
+- Player-issued start/stop commands require proxy administrator status.
+- Grant or revoke proxy administration from the Crafty Velocity console with `/op <online-player>` and `/deop <online-player>`. The target must be online so the plugin can store the player's UUID.
+- The proxy console can also run start/stop commands.
+- Stop is refused while players are connected, and new connections are blocked while shutdown is underway.
 - `/join` connects a player to the backend for which they received a ready notification after startup.
 
-The plugin also retains automatic startup when a player attempts to join an offline managed backend, lobby redirection while it starts, and optional idle shutdown.
+Automatic startup on a player's attempt to connect to an offline managed backend, lobby redirection, clickable ready notification, and optional idle shutdown are retained.
 
-## Features retained from VelocityAutostart
+## Paper Hub commands and command blocks
 
-- Starts managed backend servers on demand when a player attempts to connect.
-- Keeps players in the lobby while a backend starts.
-- Offers a clickable join message and `/join` when the backend becomes reachable.
-- Optionally stops servers after an idle period.
-- Uses Crafty Controller API for backend start and stop actions.
-
-## Paper Hub commands and command-block control
-
-HubControl registers `/hvas` on the Paper Hub. This distinct name avoids a command-name collision with Velocity's `/vas` proxy command:
+HubControl registers a separate command on the Paper Hub:
 
 ```
 /hvas start survival
@@ -46,24 +60,12 @@ HubControl registers `/hvas` on the Paper Hub. This distinct name avoids a comma
 /hvas status survival
 ```
 
-Hub command blocks and the server console may issue start/stop requests. Players need `hubcontrol.admin` for start/stop; status is available to ordinary players. This lets a Hub command block or an authorized player operate the managed backends without giving the Hub plugin Crafty credentials.
+- Hub OPs, the server console, and command blocks can start/stop managed servers.
+- Ordinary players can check status but cannot start or stop servers.
+- Command blocks do not need a permission attachment; authorization is handled inside HubControl.
+- HubControl discovers managed server names from VelocityAutostart automatically. There is no second server list to maintain in the Hub config.
 
-
-HubControl communicates with the Velocity plugin through an authenticated HTTP API bound only to `127.0.0.1`. The Hub plugin does not receive the Crafty API token and cannot contact Crafty directly.
-
-Hub command syntax:
-
-```
-/hvas start survival
-/hvas stop survival
-/hvas status survival
-```
-
-- `start` requests startup and reports that the request was accepted.
-- `stop` refuses to shut down a server while any players are connected. Velocity also blocks new connection attempts while a shutdown is in progress.
-- `status` reports the latest server state and connected player count.
-
-The status cache is refreshed every two seconds by default. HubControl also publishes a main-scoreboard objective named `vas_state` for command-block logic:
+HubControl publishes a main-scoreboard objective named `vas_state` for command-block logic:
 
 | Score | State |
 |---:|---|
@@ -73,85 +75,64 @@ The status cache is refreshed every two seconds by default. HubControl also publ
 | 3 | STOPPING |
 | 4 | ERROR |
 
-Each server is represented by a fake scoreboard holder named with a leading dollar sign. For example, Survival uses `$survival`.
+Each server is represented by a fake scoreboard holder with a leading dollar sign. Survival uses `$survival`.
 
-Command blocks can test whether Survival is running with:
+For example, a command block can check whether Survival is running:
 
 ```
 execute if score $survival vas_state matches 1 run <your command>
 ```
 
-This scoreboard is the automation interface. Command blocks can use it to decide when to place or remove portal blocks; portal block placement itself is intentionally outside both plugins.
+To request a start from a command block, enter `hvas start survival` as its command. To request a stop, enter `hvas stop survival`. The leading slash is optional in the command-block command field.
 
-## Security
+The scoreboard is the automation interface for portal logic. Portal block placement itself is intentionally outside these plugins.
 
-- The control API listens only on IPv4 loopback (`127.0.0.1`), not on the LAN.
-- Every request requires a random bearer token.
-- VelocityAutostart generates the token automatically in its config if one is not already present.
-- HubControl is configured with the same token.
-- Hub command blocks and the server console may request start/stop operations. Ordinary players need the `hubcontrol.admin` permission to do so.
-- On Velocity, `/vas status <server>` is public; player use of `/vas start` and `/vas stop` requires proxy administrator status granted through the Velocity console `/op` command and revoked with `/deop`.
-- On the Paper Hub, HubControl's `/hvas status <server>` is public; player use of `/hvas start` and `/hvas stop` requires the player to be OP on the Hub. Command blocks and console can issue these operations.
+## Control API and security
+
+- VelocityAutostart exposes a small authenticated HTTP API on `127.0.0.1:28090` only. It is not exposed to the LAN.
+- The API requires a random bearer token generated automatically in VelocityAutostart's config.
+- HubControl copies that token from `controlApiToken` in `plugins/velocity-autostart/config.json`. Do not use the Crafty API token here.
+- The Hub plugin does not receive Crafty credentials and cannot contact Crafty directly.
+- The API provides managed-server discovery plus status/start/stop operations.
+- The previous default API port 25590 is automatically migrated to 28090 by both plugins.
 
 ## Build
 
-The root Gradle project includes both modules. A single build produces two JARs:
+A single Gradle build produces two JAR files:
 
-- `build/libs/velocity-autostart-1.1.0.jar`
-- `hub-plugin/build/libs/hub-control-1.0.0.jar`
+- `build/libs/velocity-autostart-1.2.0.jar`
+- `hub-plugin/build/libs/hub-control-1.1.0.jar`
 
-The project uses Java 25, the current Velocity API, and the Paper 26.3 API.
+The project uses Java 25, Velocity API 4.3.2-SNAPSHOT, and Paper API 26.3.
 
 ## Installation overview
 
-1. Install `velocity-autostart-1.1.0.jar` in Velocity's `plugins` directory.
-2. Restart Velocity once so it creates or updates `plugins/velocity-autostart/config.json`.
-3. Copy the generated `controlApiToken` value from that file.
-4. Install `hub-control-1.0.0.jar` in the Hub Paper server's `plugins` directory.
-5. In `plugins/HubControl/config.yml`, set `api-token` to the exact `controlApiToken` copied from VelocityAutostart.
-6. Ensure `managed-servers` lists the Velocity server names to expose to command blocks, such as `survival`.
-7. Restart Hub.
+1. Install `velocity-autostart-1.2.0.jar` in Velocity's `plugins` directory.
+2. Ensure `velocity.toml` contains the separate `[autostart]` table and the Crafty IDs for the backend servers you want managed.
+3. Restart Velocity. The plugin reads the server addresses from `[servers]`, reads Crafty IDs from `[autostart]`, and generates/updates its config.
+4. Copy `controlApiToken` from `plugins/velocity-autostart/config.json`.
+5. Install `hub-control-1.1.0.jar` in the Hub Paper server's `plugins` directory.
+6. In `plugins/HubControl/config.yml`, set `api-token` to the exact `controlApiToken` copied from VelocityAutostart.
+7. Restart the Hub.
 
-Do not put the Crafty API token into HubControl. Only VelocityAutostart needs it.
-
-## VelocityAutostart configuration additions
-
-Existing settings remain in `plugins/velocity-autostart/config.json`. The plugin adds:
-
-```json
-{
-  "controlApiPort": 25590,
-  "controlApiToken": "generated-automatically"
-}
-```
-
-Keep the generated token private. The API is intended for HubControl on the same Ubuntu VM.
+The Hub config contains only the API URL, API token, and refresh/request timing. It no longer contains a list of server names.
 
 ## HubControl configuration
 
 ```yaml
-velocity-api-url: "http://127.0.0.1:25590"
+velocity-api-url: "http://127.0.0.1:28090"
 api-token: "COPY_CONTROL_API_TOKEN_HERE"
-managed-servers:
-  - "survival"
 status-refresh-seconds: 2
 request-timeout-millis: 1500
 ```
 
-Server names must match the names in Velocity's `[servers]` section and the keys in VelocityAutostart's `servers` object.
-
-## Compatibility
+## Compatibility and behavior
 
 - Java 25 or later.
 - Velocity API 4.3.2-SNAPSHOT for the proxy module.
 - Paper API 26.3 for HubControl.
 - Crafty Controller API v2.
-- The managed backend ports must be reachable from the Velocity process.
-
-## Important behavior
-
-A server is reported as `RUNNING` when its configured TCP port is reachable from Velocity. `STARTING` and `STOPPING` are tracked while the corresponding operation is in progress. A timeout or failed operation is reported as `ERROR`.
-
-Shutdown is guarded by Velocity's live connected-player count. If at least one player is connected, the stop request is rejected. While stopping, new connections to that backend are denied until its port closes.
-
-TLS verification for the Crafty API remains controlled by `craftyAllowInsecureTls`. Disabling verification is not recommended for production.
+- Managed backend ports must be reachable from the Velocity process.
+- A server is reported as RUNNING when its configured TCP port is reachable from Velocity. STARTING and STOPPING are tracked during operations. A timeout or failed operation is reported as ERROR.
+- Shutdown is guarded by Velocity's live connected-player count. If at least one player is connected, the stop request is rejected.
+- TLS verification for the Crafty API remains controlled by `craftyAllowInsecureTls`. Disabling verification is not recommended for production.

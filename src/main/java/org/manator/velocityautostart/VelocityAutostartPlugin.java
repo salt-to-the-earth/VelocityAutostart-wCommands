@@ -423,7 +423,10 @@ public class VelocityAutostartPlugin {
                 loaded.adminUuids = new java.util.ArrayList<>();
                 changed = true;
             }
-            if (loaded.controlApiPort < 1 || loaded.controlApiPort > 65535) {
+            if (loaded.controlApiPort == 25590) {
+                loaded.controlApiPort = 28090;
+                changed = true;
+            } else if (loaded.controlApiPort < 1 || loaded.controlApiPort > 65535) {
                 loaded.controlApiPort = 28090;
                 changed = true;
             }
@@ -532,7 +535,7 @@ public class VelocityAutostartPlugin {
                     craftyId, address.getHostString(), address.getPort()));
         }
 
-        if (autostartSectionFound && config.servers != null && !config.servers.isEmpty()) {
+        if (!craftyIds.isEmpty() && autostartSectionFound && config.servers != null && !config.servers.isEmpty()) {
             config.servers.clear();
             try {
                 saveConfig();

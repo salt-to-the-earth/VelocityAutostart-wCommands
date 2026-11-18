@@ -115,6 +115,13 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
         String action = args[0].toLowerCase();
         String server = args[1].toLowerCase();
 
+        if (sender instanceof BlockCommandSender blockSender) {
+            org.bukkit.Location location = blockSender.getBlock().getLocation();
+            getLogger().info("Command block at " + location.getWorld().getName() + " "
+                    + location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ()
+                    + " issued /hvas " + action + " " + server + ".");
+        }
+
         switch (action) {
             case "start", "stop" -> {
                 boolean authorized = sender instanceof BlockCommandSender

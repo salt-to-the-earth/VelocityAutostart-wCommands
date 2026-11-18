@@ -1,5 +1,5 @@
 name: HubControl
-version: 1.1.0
+version: 1.1.1
 main: org.manator.hubcontrol.HubControlPlugin
 api-version: '26.3'
 description: Command-block bridge to VelocityAutostart server controls

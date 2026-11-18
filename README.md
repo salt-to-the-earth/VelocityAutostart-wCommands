@@ -5,7 +5,7 @@
 This project provides controls in two places:
 
 - **Velocity proxy chat:** `/vas <start|stop|status> <server>`
-- **Paper Hub chat or command blocks:** `/vas <start|stop|status> <server>`
+- **Paper Hub chat or command blocks:** `/hvas <start|stop|status> <server>`
 
 The command syntax is intentionally similar, but each command is handled by the plugin installed on that server. See the separate sections below for permissions and behavior.
 
@@ -16,9 +16,9 @@ The project builds **two separate JAR files** from one GitHub repository.
 VelocityAutostart registers `/vas` on the Velocity proxy:
 
 ```
-/vas start survival
-/vas stop survival
-/vas status survival
+/hvas start survival
+/hvas stop survival
+/hvas status survival
 ```
 
 - `status` is available to everyone and reports the state and connected-player count.
@@ -38,12 +38,12 @@ The plugin also retains automatic startup when a player attempts to join an offl
 
 ## Paper Hub commands and command-block control
 
-HubControl independently registers the same `/vas` command on the Paper Hub:
+HubControl registers `/hvas` on the Paper Hub. This distinct name avoids a command-name collision with Velocity's `/vas` proxy command:
 
 ```
-/vas start survival
-/vas stop survival
-/vas status survival
+/hvas start survival
+/hvas stop survival
+/hvas status survival
 ```
 
 Hub command blocks and the server console may issue start/stop requests. Players need `hubcontrol.admin` for start/stop; status is available to ordinary players. This lets a Hub command block or an authorized player operate the managed backends without giving the Hub plugin Crafty credentials.
@@ -54,9 +54,9 @@ HubControl communicates with the Velocity plugin through an authenticated HTTP A
 Hub command syntax:
 
 ```
-/vas start survival
-/vas stop survival
-/vas status survival
+/hvas start survival
+/hvas stop survival
+/hvas status survival
 ```
 
 - `start` requests startup and reports that the request was accepted.
@@ -91,7 +91,7 @@ This scoreboard is the automation interface. Command blocks can use it to decide
 - HubControl is configured with the same token.
 - Hub command blocks and the server console may request start/stop operations. Ordinary players need the `hubcontrol.admin` permission to do so.
 - On Velocity, `/vas status <server>` is public; player use of `/vas start` and `/vas stop` requires `velocityautostart.admin`.
-- On the Paper Hub, HubControl's `/vas status <server>` is public; player use of `/vas start` and `/vas stop` requires `hubcontrol.admin`. Command blocks and console can issue these operations.
+- On the Paper Hub, HubControl's `/hvas status <server>` is public; player use of `/vas start` and `/vas stop` requires `hubcontrol.admin`. Command blocks and console can issue these operations.
 
 ## Build
 

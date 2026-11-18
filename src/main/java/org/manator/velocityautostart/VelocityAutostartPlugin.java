@@ -98,7 +98,7 @@ public class VelocityAutostartPlugin {
                     .schedule();
         }
 
-        logger.info("VelocityAutostart loaded, " + config.servers.size() + " managed servers configured.");
+        logger.info("VelocityAutostart loaded, " + managedServers.size() + " managed servers configured.");
     }
 
     @Subscribe
@@ -115,7 +115,7 @@ public class VelocityAutostartPlugin {
             return;
         }
         String targetName = initial.get().getServerInfo().getName();
-        Config.ManagedServer managed = config.servers.get(targetName);
+        Config.ManagedServer managed = managedServers.get(targetName);
         if (managed == null) {
             return;
         }
@@ -147,7 +147,7 @@ public class VelocityAutostartPlugin {
     @Subscribe
     public void onServerPreConnect(ServerPreConnectEvent event) {
         String targetName = event.getOriginalServer().getServerInfo().getName();
-        Config.ManagedServer managed = config.servers.get(targetName);
+        Config.ManagedServer managed = managedServers.get(targetName);
         if (managed == null) {
             return;
         }
@@ -249,7 +249,7 @@ public class VelocityAutostartPlugin {
     }
 
     private void checkIdleServers() {
-        for (Map.Entry<String, Config.ManagedServer> entry : config.servers.entrySet()) {
+        for (Map.Entry<String, Config.ManagedServer> entry : managedServers.entrySet()) {
             String serverName = entry.getKey();
             Config.ManagedServer managed = entry.getValue();
             if (stoppingServers.contains(serverName) || startingServers.contains(serverName)) {
@@ -305,7 +305,7 @@ public class VelocityAutostartPlugin {
     }
 
     ServerSnapshot getServerSnapshot(String serverName) {
-        Config.ManagedServer managed = config.servers.get(serverName);
+        Config.ManagedServer managed = managedServers.get(serverName);
         if (managed == null) {
             return null;
         }
@@ -329,7 +329,7 @@ public class VelocityAutostartPlugin {
     }
 
     ControlResult requestStart(String serverName) {
-        Config.ManagedServer managed = config.servers.get(serverName);
+        Config.ManagedServer managed = managedServers.get(serverName);
         if (managed == null) {
             return new ControlResult(404, "ERROR", "Server is not managed: " + serverName, 0);
         }
@@ -355,7 +355,7 @@ public class VelocityAutostartPlugin {
     }
 
     ControlResult requestStop(String serverName) {
-        Config.ManagedServer managed = config.servers.get(serverName);
+        Config.ManagedServer managed = managedServers.get(serverName);
         if (managed == null) {
             return new ControlResult(404, "ERROR", "Server is not managed: " + serverName, 0);
         }
@@ -456,7 +456,7 @@ public class VelocityAutostartPlugin {
         try {
             if (Files.exists(velocityToml)) {
                 boolean inAutostart = false;
-                Pattern entry = Pattern.compile("^(?:\\\"([^\\\"]+)\\\"|([A-Za-z0-9_-]+))\\s*=\\s*\\\"([^\\\"]+)\\\"\\s*(?:#.*)?$");
+                Pattern entry = Pattern.compile("^(?:\"([^\"]+)\"|([A-Za-z0-9_-]+))\\s*=\\s*\"([^\"]+)\"\\s*(?:#.*)?$");
                 for (String rawLine : Files.readAllLines(velocityToml)) {
                     String line = rawLine.trim();
                     if (line.startsWith("[") && line.endsWith("]")) {
@@ -484,23 +484,23 @@ public class VelocityAutostartPlugin {
             logger.warning("Could not read velocity.toml: " + exception.getMessage());
         }
 
-        // Backward-compatible migration: if the old JSON mapping exists and no [autostart]
-        // table has been created yet, append its Crafty IDs without changing existing TOML.
+        // Backward-compatible migration: append the old JSON Crafty IDs only when
+        // velocity.toml does not already contain an [autostart] table.
         if (!autostartSectionFound && config.servers != null && !config.servers.isEmpty()
                 && Files.exists(velocityToml)) {
             try {
-                StringBuilder addition = new StringBuilder();
                 String existing = Files.readString(velocityToml);
-                if (!existing.endsWith("\\n")) {
-                    addition.append('\\n');
+                StringBuilder addition = new StringBuilder();
+                if (!existing.endsWith("\n")) {
+                    addition.append('\n');
                 }
-                addition.append("\\n[autostart]\\n");
+                addition.append("\n[autostart]\n");
                 for (Map.Entry<String, Config.ManagedServer> entry : config.servers.entrySet()) {
                     if (entry.getValue() != null && entry.getValue().craftyServerId != null
                             && !entry.getValue().craftyServerId.isBlank()) {
-                        String name = entry.getKey().replace("\\\\", "\\\\\\\\").replace("\\\"", "\\\\\\\"");
-                        addition.append('\\\"').append(name).append("\\\" = \\\"")
-                                .append(entry.getValue().craftyServerId).append("\\\"\\n");
+                        String name = entry.getKey().replace("\\", "\\\\").replace("\"", "\\\"");
+                        addition.append('"').append(name).append("\" = \"")
+                                .append(entry.getValue().craftyServerId).append("\"\n");
                         craftyIds.put(entry.getKey(), entry.getValue().craftyServerId);
                     }
                 }
@@ -536,7 +536,7 @@ public class VelocityAutostartPlugin {
             config.servers.clear();
             try {
                 saveConfig();
-                logger.info("Removed migrated legacy server mappings from VelocityAutostart config.json.");
+                logger.info("Removed old duplicate server mappings from VelocityAutostart config.json.");
             } catch (IOException exception) {
                 logger.warning("Could not clean old server mappings from config.json: " + exception.getMessage());
             }
@@ -735,7 +735,7 @@ public class VelocityAutostartPlugin {
             }
             if (args.length == 2) {
                 String prefix = args[1].toLowerCase();
-                return config.servers.keySet().stream()
+                return managedServers.keySet().stream()
                         .filter(server -> server.toLowerCase().startsWith(prefix))
                         .sorted()
                         .toList();

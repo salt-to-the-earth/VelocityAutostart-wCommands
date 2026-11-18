@@ -5,9 +5,9 @@ api-version: '26.3'
 description: Command-block bridge to VelocityAutostart server controls
 authors: [salt-to-the-earth]
 commands:
-  vas:
+  hvas:
     description: Control managed backend servers through VelocityAutostart
-    usage: /vas <start|stop|status> <server>
+    usage: /hvas <start|stop|status> <server>
     permission: hubcontrol.use
 permissions:
   hubcontrol.use:

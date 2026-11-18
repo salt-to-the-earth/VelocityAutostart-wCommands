@@ -40,7 +40,7 @@ import java.util.regex.Pattern;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
-@Plugin(id = "velocity-autostart", name = "VelocityAutostart", version = "1.1.0",
+@Plugin(id = "velocity-autostart", name = "VelocityAutostart", version = "1.2.0",
         description = "Starts and controls backend servers via the Crafty Controller API")
 public class VelocityAutostartPlugin {
 

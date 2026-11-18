@@ -82,6 +82,10 @@ public class VelocityAutostartPlugin {
                 proxy.getCommandManager().metaBuilder("join").build(), new JoinCommand());
         proxy.getCommandManager().register(
                 proxy.getCommandManager().metaBuilder("vas").build(), new VasCommand());
+        proxy.getCommandManager().register(
+                proxy.getCommandManager().metaBuilder("op").build(), new AdminCommand(true));
+        proxy.getCommandManager().register(
+                proxy.getCommandManager().metaBuilder("deop").build(), new AdminCommand(false));
 
         if (config.autoStopEnabled) {
             proxy.getScheduler().buildTask(this, this::checkIdleServers)
@@ -411,6 +415,10 @@ public class VelocityAutostartPlugin {
                 loaded.servers = new ConcurrentHashMap<>();
                 changed = true;
             }
+            if (loaded.adminUuids == null) {
+                loaded.adminUuids = new java.util.ArrayList<>();
+                changed = true;
+            }
             if (loaded.controlApiPort < 1 || loaded.controlApiPort > 65535) {
                 loaded.controlApiPort = 25590;
                 changed = true;
@@ -429,6 +437,15 @@ public class VelocityAutostartPlugin {
         } catch (IOException exception) {
             throw new RuntimeException("Could not load configuration", exception);
         }
+    }
+
+    private boolean isAdmin(Player player) {
+        return config.adminUuids.stream().anyMatch(uuid -> uuid.equalsIgnoreCase(player.getUniqueId().toString()));
+    }
+
+    private void saveConfig() throws IOException {
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        Files.writeString(dataDirectory.resolve("config.json"), gson.toJson(config));
     }
 
     public Logger getLogger() {
@@ -458,6 +475,65 @@ public class VelocityAutostartPlugin {
             this.status = status;
             this.message = message;
             this.players = players;
+        }
+    }
+
+    /** Console-only op/deop commands for managing proxy-side VelocityAutostart administrators. */
+    private class AdminCommand implements SimpleCommand {
+        private final boolean grant;
+
+        private AdminCommand(boolean grant) {
+            this.grant = grant;
+        }
+
+        @Override
+        public void execute(Invocation invocation) {
+            CommandSource source = invocation.source();
+            if (source instanceof Player) {
+                source.sendMessage(Component.text("Use this command from the Velocity console in Crafty."));
+                return;
+            }
+            String[] args = invocation.arguments();
+            String label = grant ? "op" : "deop";
+            if (args.length != 1) {
+                source.sendMessage(Component.text("Usage: /" + label + " <online-player>"));
+                return;
+            }
+            String playerName = args[0];
+            Player target = proxy.getPlayer(playerName).orElse(null);
+            if (target == null) {
+                source.sendMessage(Component.text("Player must be online on the proxy so their account UUID can be verified."));
+                return;
+            }
+            String uuid = target.getUniqueId().toString();
+            boolean changed;
+            if (grant) {
+                changed = config.adminUuids.stream().noneMatch(existing -> existing.equalsIgnoreCase(uuid));
+                if (changed) config.adminUuids.add(uuid);
+            } else {
+                changed = config.adminUuids.removeIf(existing -> existing.equalsIgnoreCase(uuid));
+            }
+            if (!changed) {
+                source.sendMessage(Component.text(playerName + (grant ? " is already a proxy administrator." : " is not a proxy administrator.")));
+                return;
+            }
+            try {
+                saveConfig();
+                source.sendMessage(Component.text(playerName + (grant
+                        ? " is now a proxy administrator." : " is no longer a proxy administrator.")));
+                logger.info(playerName + (grant ? " granted" : " revoked") + " VelocityAutostart administrator access.");
+            } catch (IOException exception) {
+                // Roll back the in-memory change if it could not be persisted.
+                if (grant) config.adminUuids.removeIf(existing -> existing.equalsIgnoreCase(uuid));
+                else config.adminUuids.add(uuid);
+                source.sendMessage(Component.text("Could not save the administrator list: " + exception.getMessage()));
+                logger.severe("Could not save proxy administrator list: " + exception.getMessage());
+            }
+        }
+
+        @Override
+        public boolean hasPermission(Invocation invocation) {
+            return !(invocation.source() instanceof Player);
         }
     }
 
@@ -503,10 +579,10 @@ public class VelocityAutostartPlugin {
             // Keep command discovery available to everyone, but enforce admin access
             // when an actual start/stop operation is requested.
             if ((action.equals("start") || action.equals("stop"))
-                    && source instanceof Player
-                    && !source.hasPermission("velocityautostart.admin")) {
+                    && source instanceof Player player
+                    && !isAdmin(player)) {
                 source.sendMessage(Component.text(
-                        "You do not have permission to start or stop servers. You can still use /vas status <server>."));
+                        "You are not a proxy administrator. An administrator can grant access with /op <your-name> from the Velocity console."));
                 return;
             }
 

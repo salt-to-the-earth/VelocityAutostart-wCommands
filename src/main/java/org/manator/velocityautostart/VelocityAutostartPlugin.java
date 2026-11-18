@@ -31,6 +31,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -518,6 +519,32 @@ public class VelocityAutostartPlugin {
                 }
             }
             source.sendMessage(Component.text(result.message));
+        }
+
+
+        @Override
+        public List<String> suggest(Invocation invocation) {
+            String[] args = invocation.arguments();
+            if (args.length == 0) {
+                return List.of("start", "stop", "status");
+            }
+            if (args.length == 1) {
+                String prefix = args[0].toLowerCase();
+                if (prefix.isEmpty()) {
+                    return List.of("start", "stop", "status");
+                }
+                return List.of("start", "stop", "status").stream()
+                        .filter(option -> option.startsWith(prefix))
+                        .toList();
+            }
+            if (args.length == 2) {
+                String prefix = args[1].toLowerCase();
+                return config.servers.keySet().stream()
+                        .filter(server -> server.toLowerCase().startsWith(prefix))
+                        .sorted()
+                        .toList();
+            }
+            return List.of();
         }
 
         @Override

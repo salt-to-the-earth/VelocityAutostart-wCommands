@@ -86,6 +86,11 @@ public final class ControlApiServer implements AutoCloseable {
                 return;
             }
 
+            if ("GET".equals(requestParts[0]) && "/api/v1/servers".equals(requestParts[1])) {
+                writeServersResponse(output, plugin.getManagedServerNames());
+                return;
+            }
+
             String[] pathParts = requestParts[1].split("/");
             if (pathParts.length != 6 || !"api".equals(pathParts[1]) || !"v1".equals(pathParts[2])
                     || !"servers".equals(pathParts[3])) {
@@ -129,6 +134,23 @@ public final class ControlApiServer implements AutoCloseable {
         byte[] expected = ("Bearer " + token).getBytes(StandardCharsets.UTF_8);
         byte[] actual = supplied.getBytes(StandardCharsets.UTF_8);
         return MessageDigest.isEqual(expected, actual);
+    }
+
+    private void writeServersResponse(OutputStream output, java.util.List<String> servers)
+            throws IOException {
+        JsonObject body = new JsonObject();
+        com.google.gson.JsonArray values = new com.google.gson.JsonArray();
+        servers.forEach(values::add);
+        body.add("servers", values);
+        byte[] bytes = gson.toJson(body).getBytes(StandardCharsets.UTF_8);
+        String headers = "HTTP/1.1 200 OK\\r\\n"
+                + "Content-Type: application/json; charset=utf-8\\r\\n"
+                + "Cache-Control: no-store\\r\\n"
+                + "Connection: close\\r\\n"
+                + "Content-Length: " + bytes.length + "\\r\\n\\r\\n";
+        output.write(headers.getBytes(StandardCharsets.US_ASCII));
+        output.write(bytes);
+        output.flush();
     }
 
     private void writeResponse(OutputStream output, int code, String status, String message, int players)

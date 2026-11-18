@@ -2,9 +2,11 @@ package org.manator.hubcontrol;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -13,13 +15,16 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class HubControlPlugin extends JavaPlugin implements CommandExecutor {
 
     private final Gson gson = new Gson();
     private final Map<String, ServerStatus> statusCache = new ConcurrentHashMap<>();
+    private final Set<String> refreshing = ConcurrentHashMap.newKeySet();
     private HttpClient http;
     private String apiUrl;
     private String apiToken;
@@ -32,9 +37,7 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
         apiUrl = getConfig().getString("velocity-api-url", "http://127.0.0.1:25590").replaceAll("/+$", "");
         apiToken = getConfig().getString("api-token", "CHANGE_ME");
         requestTimeoutMillis = Math.max(250, getConfig().getInt("request-timeout-millis", 1500));
-        http = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(requestTimeoutMillis))
-                .build();
+        http = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(requestTimeoutMillis)).build();
 
         if (getCommand("vas") != null) {
             getCommand("vas").setExecutor(this);
@@ -46,7 +49,7 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
 
         getLogger().info("HubControl enabled. Velocity API: " + apiUrl);
         if ("CHANGE_ME".equals(apiToken) || apiToken.isBlank()) {
-            getLogger().warning("Set api-token in plugins/HubControl/config.yml to the token in VelocityAutostart config.json.");
+            getLogger().warning("Set api-token in plugins/HubControl/config.yml to the controlApiToken in VelocityAutostart config.json.");
         }
     }
 
@@ -71,12 +74,14 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
         String server = args[1].toLowerCase();
 
         switch (action) {
-            case "start" -> {
-                sendOperation(sender, server, "start");
-                return true;
-            }
-            case "stop" -> {
-                sendOperation(sender, server, "stop");
+            case "start", "stop" -> {
+                if (!(sender instanceof BlockCommandSender)
+                        && !(sender instanceof ConsoleCommandSender)
+                        && !sender.hasPermission("hubcontrol.admin")) {
+                    sender.sendMessage("[HubControl] You do not have permission to control servers.");
+                    return false;
+                }
+                sendOperation(sender, server, action);
                 return true;
             }
             case "status" -> {
@@ -110,7 +115,8 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
                         statusCache.put(server, new ServerStatus(body.get("status").getAsString(),
                                 body.has("players") ? body.get("players").getAsInt() : 0));
                     }
-                    getServer().getScheduler().runTask(this, () -> sender.sendMessage("[HubControl] " + message));
+                    getServer().getScheduler().runTask(this,
+                            () -> sender.sendMessage("[HubControl] " + message));
                 })
                 .exceptionally(error -> {
                     getLogger().warning("Could not contact VelocityAutostart: " + error.getMessage());
@@ -121,12 +127,21 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
     }
 
     private void refreshKnownStatuses() {
+        List<String> configured = getConfig().getStringList("managed-servers");
+        for (String server : configured) {
+            refreshStatus(server.toLowerCase(), null);
+        }
         for (String server : statusCache.keySet()) {
-            refreshStatus(server, null);
+            if (!configured.contains(server)) {
+                refreshStatus(server, null);
+            }
         }
     }
 
     private void refreshStatus(String server, CommandSender sender) {
+        if (!refreshing.add(server)) {
+            return;
+        }
         HttpRequest request = request("/api/v1/servers/" + encodePathSegment(server) + "/status").GET().build();
         http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenAccept(response -> {
@@ -153,7 +168,8 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
                                 sender.sendMessage("[HubControl] Could not contact VelocityAutostart."));
                     }
                     return null;
-                });
+                })
+                .whenComplete((ignored, error) -> refreshing.remove(server));
     }
 
     private HttpRequest.Builder request(String path) {
@@ -165,7 +181,8 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
 
     private JsonObject parseObject(String json) {
         try {
-            return gson.fromJson(json, JsonObject.class);
+            JsonObject parsed = gson.fromJson(json, JsonObject.class);
+            return parsed == null ? new JsonObject() : parsed;
         } catch (Exception ignored) {
             return new JsonObject();
         }

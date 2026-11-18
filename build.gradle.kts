@@ -3,10 +3,10 @@ plugins {
 }
 
 group = "org.manator"
-version = "1.0.0"
+version = "1.2.1"
 
 repositories {
-    mavenCentral() // Use Maven Central for Velocity API
+    mavenCentral()
     maven {
         name = "papermc"
         url = uri("https://repo.papermc.io/repository/maven-public/")
@@ -14,12 +14,12 @@ repositories {
 }
 
 dependencies {
-    compileOnly("com.velocitypowered:velocity-api:3.1.1") // Update to a valid version
-    annotationProcessor("com.velocitypowered:velocity-api:3.1.1")
+    compileOnly("com.velocitypowered:velocity-api:4.3.2-SNAPSHOT")
+    annotationProcessor("com.velocitypowered:velocity-api:4.3.2-SNAPSHOT")
 }
+
 java {
-    sourceCompatibility = JavaVersion.VERSION_17 // Ensure compatibility with Velocity 3.4+
-    targetCompatibility = JavaVersion.VERSION_17
+    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 }
 
 tasks.jar {

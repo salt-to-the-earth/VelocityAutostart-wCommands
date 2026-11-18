@@ -1,0 +1,43 @@
+name: Build plugins
+
+on:
+  push:
+    branches:
+      - main
+      - feature/**
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build both plugin JARs
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon clean build
+
+      - name: Upload plugin JARs
+        uses: actions/upload-artifact@v4
+        with:
+          name: velocity-and-hub-plugin-jars
+          path: |
+            build/libs/velocity-autostart-*.jar
+            hub-plugin/build/libs/hub-control-*.jar
+          if-no-files-found: error
+          retention-days: 14

@@ -35,6 +35,7 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
     private final Gson gson = new Gson();
     private final Map<String, ServerStatus> statusCache = new ConcurrentHashMap<>();
     private final Set<String> refreshing = ConcurrentHashMap.newKeySet();
+    private final Set<String> knownServers = ConcurrentHashMap.newKeySet();
     private HttpClient http;
     private String apiUrl;
     private String apiToken;
@@ -45,7 +46,7 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        apiUrl = getConfig().getString("velocity-api-url", "http://127.0.0.1:25590").replaceAll("/+$", "");
+        apiUrl = getConfig().getString("velocity-api-url", "http://127.0.0.1:28090").replaceAll("/+$", "");
         apiToken = getConfig().getString("api-token", "CHANGE_ME");
         requestTimeoutMillis = Math.max(250, getConfig().getInt("request-timeout-millis", 1500));
         http = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(requestTimeoutMillis)).build();
@@ -131,8 +132,7 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
         }
         if (args.length == 2) {
             String prefix = args[1].toLowerCase();
-            return getConfig().getStringList("managed-servers").stream()
-                    .map(String::toLowerCase)
+            return knownServers.stream()
                     .filter(server -> server.startsWith(prefix))
                     .sorted()
                     .toList();
@@ -164,15 +164,48 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
     }
 
     private void refreshKnownStatuses() {
-        List<String> configured = getConfig().getStringList("managed-servers");
-        for (String server : configured) {
-            refreshStatus(server.toLowerCase(), null);
+        // Discover the managed server list from VelocityAutostart. HubControl keeps no
+        // separate server-name list, so additions in velocity.toml appear automatically.
+        if (!refreshing.add("__server_discovery__")) {
+            return;
         }
-        for (String server : statusCache.keySet()) {
-            if (!configured.contains(server)) {
-                refreshStatus(server, null);
-            }
-        }
+        HttpRequest request = request("/api/v1/servers").GET().build();
+        http.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenAccept(response -> {
+                    JsonObject body = parseObject(response.body());
+                    if (response.statusCode() < 200 || response.statusCode() >= 300
+                            || !body.has("servers") || !body.get("servers").isJsonArray()) {
+                        getLogger().warning("Could not discover managed servers from VelocityAutostart (HTTP "
+                                + response.statusCode() + ").");
+                        return;
+                    }
+
+                    Set<String> discovered = ConcurrentHashMap.newKeySet();
+                    for (com.google.gson.JsonElement value : body.getAsJsonArray("servers")) {
+                        if (value.isJsonPrimitive()) {
+                            String name = value.getAsString().toLowerCase();
+                            if (!name.isBlank()) {
+                                discovered.add(name);
+                            }
+                        }
+                    }
+                    knownServers.clear();
+                    knownServers.addAll(discovered);
+                    for (String cached : statusCache.keySet()) {
+                        if (!discovered.contains(cached)) {
+                            statusCache.remove(cached);
+                        }
+                    }
+                    for (String server : discovered) {
+                        refreshStatus(server, null);
+                    }
+                })
+                .exceptionally(error -> {
+                    getLogger().warning("Could not contact VelocityAutostart for server discovery: "
+                            + error.getMessage());
+                    return null;
+                })
+                .whenComplete((ignored, error) -> refreshing.remove("__server_discovery__"));
     }
 
     private void refreshStatus(String server, CommandSender sender) {

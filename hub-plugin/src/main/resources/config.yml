@@ -1,6 +1,12 @@
 # HubControl connects to the local VelocityAutostart control API.
-# Copy the control API token from VelocityAutostart's config.json.
+# Copy controlApiToken from plugins/velocity-autostart/config.json.
 velocity-api-url: "http://127.0.0.1:25590"
 api-token: "CHANGE_ME"
+
+# Names must match the [servers] names in velocity.toml and VelocityAutostart config.json.
+# The plugin refreshes these statuses so command blocks can use isrunning/isstopped.
+managed-servers:
+  - "survival"
+
 status-refresh-seconds: 2
 request-timeout-millis: 1500

@@ -30,7 +30,7 @@ public class Config {
     public String messageServerStoppedIdle = "&c%server% was stopped due to inactivity. Reconnect to start it again.";
 
     // Authenticated loopback API used by the Paper HubControl plugin.
-    public int controlApiPort = 25590;
+    public int controlApiPort = 28090;
     public String controlApiToken = "";
 
     // Auto-Stop on Inactivity

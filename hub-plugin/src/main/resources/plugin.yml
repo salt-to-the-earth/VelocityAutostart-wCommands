@@ -1,0 +1,15 @@
+name: HubControl
+version: 1.0.0
+main: org.manator.hubcontrol.HubControlPlugin
+api-version: '26.3'
+description: Command-block bridge to VelocityAutostart server controls
+authors: [salt-to-the-earth]
+commands:
+  vas:
+    description: Control managed backend servers through VelocityAutostart
+    usage: /vas <start|stop|status|isrunning|isstopped> <server>
+    permission: hubcontrol.use
+permissions:
+  hubcontrol.use:
+    description: Allows use of HubControl commands
+    default: true

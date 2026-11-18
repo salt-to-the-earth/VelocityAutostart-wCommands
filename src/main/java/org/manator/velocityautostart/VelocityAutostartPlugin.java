@@ -452,7 +452,7 @@ public class VelocityAutostartPlugin {
      * so names and backend addresses are never duplicated in this plugin's JSON file.
      */
     private void loadManagedServersFromVelocityToml() {
-        Path velocityToml = dataDirectory.getParent().getParent().resolve("velocity.toml");
+        Path velocityToml = Path.of("velocity.toml").toAbsolutePath().normalize();
         Map<String, String> craftyIds = new java.util.LinkedHashMap<>();
         boolean autostartSectionFound = false;
 

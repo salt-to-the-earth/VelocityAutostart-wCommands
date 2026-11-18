@@ -6,6 +6,7 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -25,7 +26,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class HubControlPlugin extends JavaPlugin implements CommandExecutor {
+public final class HubControlPlugin extends JavaPlugin implements CommandExecutor, TabCompleter {
 
     // Command-block automation reads these values:
     // 0=STOPPED, 1=RUNNING, 2=STARTING, 3=STOPPING, 4=ERROR.
@@ -50,8 +51,9 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
         http = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(requestTimeoutMillis)).build();
         initializeScoreboard();
 
-        if (getCommand("vas") != null) {
-            getCommand("vas").setExecutor(this);
+        if (getCommand("hvas") != null) {
+            getCommand("hvas").setExecutor(this);
+            getCommand("hvas").setTabCompleter(this);
         }
 
         int refreshSeconds = Math.max(1, getConfig().getInt("status-refresh-seconds", 2));
@@ -89,7 +91,7 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length != 2) {
-            sender.sendMessage("Usage: /vas <start|stop|status> <server>");
+            sender.sendMessage("Usage: /hvas <start|stop|status> <server>");
             return false;
         }
 
@@ -116,6 +118,25 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
                 return false;
             }
         }
+    }
+
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (args.length == 1) {
+            return List.of("start", "stop", "status").stream()
+                    .filter(option -> option.startsWith(args[0].toLowerCase()))
+                    .toList();
+        }
+        if (args.length == 2) {
+            String prefix = args[1].toLowerCase();
+            return getConfig().getStringList("managed-servers").stream()
+                    .map(String::toLowerCase)
+                    .filter(server -> server.startsWith(prefix))
+                    .sorted()
+                    .toList();
+        }
+        return List.of();
     }
 
     private void sendOperation(CommandSender sender, String server, String operation) {

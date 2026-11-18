@@ -7,9 +7,12 @@ authors: [salt-to-the-earth]
 commands:
   vas:
     description: Control managed backend servers through VelocityAutostart
-    usage: /vas <start|stop|status|isrunning|isstopped> <server>
+    usage: /vas <start|stop|status> <server>
     permission: hubcontrol.use
 permissions:
   hubcontrol.use:
     description: Allows use of HubControl commands
     default: true
+  hubcontrol.admin:
+    description: Allows players to start or stop managed servers
+    default: op

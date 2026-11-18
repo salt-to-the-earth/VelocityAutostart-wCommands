@@ -143,11 +143,11 @@ public final class ControlApiServer implements AutoCloseable {
         servers.forEach(values::add);
         body.add("servers", values);
         byte[] bytes = gson.toJson(body).getBytes(StandardCharsets.UTF_8);
-        String headers = "HTTP/1.1 200 OK\\r\\n"
-                + "Content-Type: application/json; charset=utf-8\\r\\n"
-                + "Cache-Control: no-store\\r\\n"
-                + "Connection: close\\r\\n"
-                + "Content-Length: " + bytes.length + "\\r\\n\\r\\n";
+        String headers = "HTTP/1.1 200 OK\r\n"
+                + "Content-Type: application/json; charset=utf-8\r\n"
+                + "Cache-Control: no-store\r\n"
+                + "Connection: close\r\n"
+                + "Content-Length: " + bytes.length + "\r\n\r\n";
         output.write(headers.getBytes(StandardCharsets.US_ASCII));
         output.write(bytes);
         output.flush();

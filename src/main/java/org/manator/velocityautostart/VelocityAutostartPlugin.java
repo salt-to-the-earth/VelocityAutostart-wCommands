@@ -499,6 +499,17 @@ public class VelocityAutostartPlugin {
             }
             String action = args[0].toLowerCase();
             String serverName = args[1].toLowerCase();
+
+            // Keep command discovery available to everyone, but enforce admin access
+            // when an actual start/stop operation is requested.
+            if ((action.equals("start") || action.equals("stop"))
+                    && source instanceof Player
+                    && !source.hasPermission("velocityautostart.admin")) {
+                source.sendMessage(Component.text(
+                        "You do not have permission to start or stop servers. You can still use /vas status <server>."));
+                return;
+            }
+
             ControlResult result;
             switch (action) {
                 case "start" -> result = requestStart(serverName);
@@ -549,12 +560,9 @@ public class VelocityAutostartPlugin {
 
         @Override
         public boolean hasPermission(Invocation invocation) {
-            String[] args = invocation.arguments();
-            if (args.length > 0 && "status".equalsIgnoreCase(args[0])) {
-                return true;
-            }
-            return !(invocation.source() instanceof Player)
-                    || invocation.source().hasPermission("velocityautostart.admin");
+            // The command and its tab-completion should be visible to all players.
+            // Permission is checked inside execute() for start/stop only.
+            return true;
         }
     }
 }

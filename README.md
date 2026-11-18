@@ -4,12 +4,12 @@
 
 This project provides controls in two places:
 
-- **Velocity proxy chat:** `/vas <start|stop|status> <server>`
+- **Velocity proxy chat:** `/vas <start|stop|status> <server>`; proxy administrators are managed from the Crafty Velocity console with `/op <online-player>` and `/deop <online-player>`.
 - **Paper Hub chat or command blocks:** `/hvas <start|stop|status> <server>`
 
 The command syntax is intentionally similar, but each command is handled by the plugin installed on that server. See the separate sections below for permissions and behavior.
 
-The project builds **two separate JAR files** from one GitHub repository.
+The project builds **two separate JAR files** from one GitHub repository. Proxy `/op` and `/deop` are plugin commands, not Paper OP commands: they only manage access to this plugin on Velocity, and are intentionally restricted to the Crafty Velocity console. The target must be online so its authenticated Minecraft UUID can be stored.
 
 ## Velocity proxy commands and automatic management
 
@@ -22,7 +22,7 @@ VelocityAutostart registers `/vas` on the Velocity proxy:
 ```
 
 - `status` is available to everyone and reports the state and connected-player count.
-- Player-issued `start` and `stop` commands require the `velocityautostart.admin` permission. The proxy console can also use them.
+- Player-issued `start` and `stop` commands require proxy administrator status. Grant or revoke it from the Velocity console in Crafty with `/op <online-player>` and `/deop <online-player>`. The target player must be online on the proxy when you run the command; the plugin stores their account UUID in its config. The proxy console can also use `/vas start` and `/vas stop`.
 - A stop request is rejected while players are connected; new connections are blocked while shutdown is underway.
 - `/join` connects a player to the backend for which they received a ready notification after startup.
 
@@ -90,8 +90,8 @@ This scoreboard is the automation interface. Command blocks can use it to decide
 - VelocityAutostart generates the token automatically in its config if one is not already present.
 - HubControl is configured with the same token.
 - Hub command blocks and the server console may request start/stop operations. Ordinary players need the `hubcontrol.admin` permission to do so.
-- On Velocity, `/vas status <server>` is public; player use of `/vas start` and `/vas stop` requires `velocityautostart.admin`.
-- On the Paper Hub, HubControl's `/hvas status <server>` is public; player use of `/vas start` and `/vas stop` requires `hubcontrol.admin`. Command blocks and console can issue these operations.
+- On Velocity, `/vas status <server>` is public; player use of `/vas start` and `/vas stop` requires proxy administrator status granted through the Velocity console `/op` command and revoked with `/deop`.
+- On the Paper Hub, HubControl's `/hvas status <server>` is public; player use of `/hvas start` and `/hvas stop` requires the player to be OP on the Hub. Command blocks and console can issue these operations.
 
 ## Build
 

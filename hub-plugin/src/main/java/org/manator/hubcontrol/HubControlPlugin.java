@@ -47,11 +47,20 @@ public final class HubControlPlugin extends JavaPlugin implements CommandExecuto
     public void onEnable() {
         saveDefaultConfig();
         String configuredApiUrl = getConfig().getString("velocity-api-url", "http://127.0.0.1:28090");
+        boolean configUpdated = false;
         if ("http://127.0.0.1:25590".equals(configuredApiUrl)) {
             configuredApiUrl = "http://127.0.0.1:28090";
             getConfig().set("velocity-api-url", configuredApiUrl);
-            saveConfig();
+            configUpdated = true;
             getLogger().info("Updated the local Velocity API port from 25590 to 28090.");
+        }
+        if (getConfig().contains("managed-servers")) {
+            getConfig().set("managed-servers", null);
+            configUpdated = true;
+            getLogger().info("Removed the obsolete Hub server list; servers are now discovered from Velocity.");
+        }
+        if (configUpdated) {
+            saveConfig();
         }
         apiUrl = configuredApiUrl.replaceAll("/+$", "");
         apiToken = getConfig().getString("api-token", "CHANGE_ME");

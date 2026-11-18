@@ -1,6 +1,8 @@
 package org.manator.velocityautostart;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -38,6 +40,9 @@ public class Config {
     public int autoStopGracePeriodSeconds = 120;
 
     public Map<String, ManagedServer> servers = new HashMap<>();
+
+    // UUIDs granted proxy-side administration with the Velocity console /op command.
+    public List<String> adminUuids = new ArrayList<>();
 
     public static class ManagedServer {
         public String craftyServerId;

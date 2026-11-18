@@ -83,7 +83,7 @@ For example, a command block can check whether Survival is running:
 execute if score $survival vas_state matches 1 run <your command>
 ```
 
-To request a start from a command block, enter `hvas start survival` as its command. To request a stop, enter `hvas stop survival`. The leading slash is optional in the command-block command field.
+To request a start from a command block, enter `hvas start survival` as its command. To request a stop, enter `hvas stop survival`. The leading slash is optional in the command-block command field. If a command block appears not to run the command, first confirm `enable-command-block=true` in the Hub server's `server.properties` and test a vanilla command such as `say command-block-test`. HubControl logs the command-block world and coordinates when it receives an `/hvas` command, which distinguishes a Minecraft command-block setting problem from a plugin/API problem.
 
 The scoreboard is the automation interface for portal logic. Portal block placement itself is intentionally outside these plugins.
 
@@ -100,18 +100,18 @@ The scoreboard is the automation interface for portal logic. Portal block placem
 
 A single Gradle build produces two JAR files:
 
-- `build/libs/velocity-autostart-1.2.0.jar`
-- `hub-plugin/build/libs/hub-control-1.1.0.jar`
+- `build/libs/velocity-autostart-1.2.1.jar`
+- `hub-plugin/build/libs/hub-control-1.1.1.jar`
 
 The project uses Java 25, Velocity API 4.3.2-SNAPSHOT, and Paper API 26.3.
 
 ## Installation overview
 
-1. Install `velocity-autostart-1.2.0.jar` in Velocity's `plugins` directory.
+1. Install `velocity-autostart-1.2.1.jar` in Velocity's `plugins` directory.
 2. Ensure `velocity.toml` contains the separate `[autostart]` table and the Crafty IDs for the backend servers you want managed.
 3. Restart Velocity. The plugin reads the server addresses from `[servers]`, reads Crafty IDs from `[autostart]`, and generates/updates its config.
 4. Copy `controlApiToken` from `plugins/velocity-autostart/config.json`.
-5. Install `hub-control-1.1.0.jar` in the Hub Paper server's `plugins` directory.
+5. Install `hub-control-1.1.1.jar` in the Hub Paper server's `plugins` directory.
 6. In `plugins/HubControl/config.yml`, set `api-token` to the exact `controlApiToken` copied from VelocityAutostart.
 7. Restart the Hub.
 

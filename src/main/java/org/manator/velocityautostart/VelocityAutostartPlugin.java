@@ -35,6 +35,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
@@ -56,6 +58,7 @@ public class VelocityAutostartPlugin {
     private final Map<String, Instant> emptySince = new ConcurrentHashMap<>();
     private final Map<String, Instant> startedAt = new ConcurrentHashMap<>();
     private final Map<String, String> operationErrors = new ConcurrentHashMap<>();
+    private final Map<String, Config.ManagedServer> managedServers = new ConcurrentHashMap<>();
 
     @Inject
     public VelocityAutostartPlugin(ProxyServer proxy, Logger logger, @DataDirectory Path dataDirectory) {
@@ -67,6 +70,7 @@ public class VelocityAutostartPlugin {
     @Subscribe
     public void onProxyInitialize(ProxyInitializeEvent event) {
         this.config = loadOrCreateConfig();
+        loadManagedServersFromVelocityToml();
         this.craftyApi = new CraftyApiClient(config, logger);
 
         try {
@@ -420,7 +424,7 @@ public class VelocityAutostartPlugin {
                 changed = true;
             }
             if (loaded.controlApiPort < 1 || loaded.controlApiPort > 65535) {
-                loaded.controlApiPort = 25590;
+                loaded.controlApiPort = 28090;
                 changed = true;
             }
             if (loaded.controlApiToken == null || loaded.controlApiToken.isBlank()
@@ -437,6 +441,111 @@ public class VelocityAutostartPlugin {
         } catch (IOException exception) {
             throw new RuntimeException("Could not load configuration", exception);
         }
+    }
+
+    /**
+     * Reads Crafty IDs from the separate [autostart] table in Velocity's velocity.toml.
+     * Server addresses are taken from Velocity's live registered-server configuration,
+     * so names and backend addresses are never duplicated in this plugin's JSON file.
+     */
+    private void loadManagedServersFromVelocityToml() {
+        Path velocityToml = dataDirectory.getParent().getParent().resolve("velocity.toml");
+        Map<String, String> craftyIds = new java.util.LinkedHashMap<>();
+        boolean autostartSectionFound = false;
+
+        try {
+            if (Files.exists(velocityToml)) {
+                boolean inAutostart = false;
+                Pattern entry = Pattern.compile("^(?:\\\"([^\\\"]+)\\\"|([A-Za-z0-9_-]+))\\s*=\\s*\\\"([^\\\"]+)\\\"\\s*(?:#.*)?$");
+                for (String rawLine : Files.readAllLines(velocityToml)) {
+                    String line = rawLine.trim();
+                    if (line.startsWith("[") && line.endsWith("]")) {
+                        inAutostart = "[autostart]".equals(line);
+                        if (inAutostart) {
+                            autostartSectionFound = true;
+                        }
+                        continue;
+                    }
+                    if (!inAutostart || line.isEmpty() || line.startsWith("#")) {
+                        continue;
+                    }
+                    Matcher matcher = entry.matcher(line);
+                    if (matcher.matches()) {
+                        String name = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+                        craftyIds.put(name, matcher.group(3));
+                    } else {
+                        logger.warning("Ignoring invalid [autostart] entry in velocity.toml: " + line);
+                    }
+                }
+            } else {
+                logger.warning("velocity.toml was not found at " + velocityToml);
+            }
+        } catch (IOException exception) {
+            logger.warning("Could not read velocity.toml: " + exception.getMessage());
+        }
+
+        // Backward-compatible migration: if the old JSON mapping exists and no [autostart]
+        // table has been created yet, append its Crafty IDs without changing existing TOML.
+        if (!autostartSectionFound && config.servers != null && !config.servers.isEmpty()
+                && Files.exists(velocityToml)) {
+            try {
+                StringBuilder addition = new StringBuilder();
+                String existing = Files.readString(velocityToml);
+                if (!existing.endsWith("\\n")) {
+                    addition.append('\\n');
+                }
+                addition.append("\\n[autostart]\\n");
+                for (Map.Entry<String, Config.ManagedServer> entry : config.servers.entrySet()) {
+                    if (entry.getValue() != null && entry.getValue().craftyServerId != null
+                            && !entry.getValue().craftyServerId.isBlank()) {
+                        String name = entry.getKey().replace("\\\\", "\\\\\\\\").replace("\\\"", "\\\\\\\"");
+                        addition.append('\\\"').append(name).append("\\\" = \\\"")
+                                .append(entry.getValue().craftyServerId).append("\\\"\\n");
+                        craftyIds.put(entry.getKey(), entry.getValue().craftyServerId);
+                    }
+                }
+                if (!craftyIds.isEmpty()) {
+                    Files.writeString(velocityToml, existing + addition);
+                    autostartSectionFound = true;
+                    logger.info("Migrated existing Crafty server IDs into velocity.toml [autostart].");
+                }
+            } catch (IOException exception) {
+                logger.warning("Could not migrate legacy server IDs into velocity.toml: " + exception.getMessage());
+            }
+        }
+
+        for (Map.Entry<String, String> entry : craftyIds.entrySet()) {
+            String serverName = entry.getKey();
+            String craftyId = entry.getValue();
+            if (craftyId == null || craftyId.isBlank()) {
+                logger.warning("Autostart server '" + serverName + "' has an empty Crafty ID; skipping it.");
+                continue;
+            }
+            RegisteredServer registered = proxy.getServer(serverName).orElse(null);
+            if (registered == null) {
+                logger.warning("Autostart entry '" + serverName
+                        + "' has a Crafty ID but is not registered in Velocity [servers]; skipping it.");
+                continue;
+            }
+            InetSocketAddress address = registered.getServerInfo().getAddress();
+            managedServers.put(serverName, new Config.ManagedServer(
+                    craftyId, address.getHostString(), address.getPort()));
+        }
+
+        if (autostartSectionFound && config.servers != null && !config.servers.isEmpty()) {
+            config.servers.clear();
+            try {
+                saveConfig();
+                logger.info("Removed migrated legacy server mappings from VelocityAutostart config.json.");
+            } catch (IOException exception) {
+                logger.warning("Could not clean old server mappings from config.json: " + exception.getMessage());
+            }
+        }
+        logger.info("Loaded " + managedServers.size() + " managed server(s) from velocity.toml [autostart].");
+    }
+
+    List<String> getManagedServerNames() {
+        return managedServers.keySet().stream().sorted().toList();
     }
 
     private boolean isAdmin(Player player) {
